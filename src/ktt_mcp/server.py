@@ -1,0 +1,81 @@
+"""FastMCP entry point. Builds the server with all tools registered."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from pathlib import Path
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
+
+from ktt_mcp.spec import KttSpec
+from ktt_mcp.tools.explain_results import explain_results as _explain
+from ktt_mcp.tools.import_loader import import_loader_json as _import_loader
+from ktt_mcp.tools.import_yaml import import_problem_yaml as _import_yaml
+from ktt_mcp.tools.search_space import compute_search_space_size
+from ktt_mcp.workdir import WorkdirManager
+
+log = logging.getLogger(__name__)
+
+
+def _coerce_spec(spec: dict[str, Any] | str) -> KttSpec:
+    """Accept either an inline dict or a path to a JSON spec file."""
+    if isinstance(spec, str):
+        data = Path(spec).read_text()
+        import json as _json
+        return KttSpec.model_validate(_json.loads(data))
+    return KttSpec.model_validate(spec)
+
+
+def _err(stage: str, message: str, **details: Any) -> dict[str, Any]:
+    return {"success": False, "stage": stage, "message": message, "details": details}
+
+
+def build_server(*, workdir: str | None = None) -> FastMCP:
+    mcp = FastMCP("ktt-mcp")
+    workdir_mgr = WorkdirManager(workdir=workdir)
+    gpu_lock = asyncio.Lock()
+
+    # expose for downstream tasks (Task 10+) to import
+    mcp.state = {"workdir": workdir_mgr, "gpu_lock": gpu_lock}  # type: ignore[attr-defined]
+
+    @mcp.tool()
+    async def ktt_search_space_size(spec: dict[str, Any] | str) -> dict[str, Any]:
+        """Count valid configurations in a KTT spec without running anything.
+
+        Returns total, after-constraints count, and per-parameter cardinality.
+        """
+        try:
+            parsed = _coerce_spec(spec)
+        except ValidationError as e:
+            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        return {"success": True, **compute_search_space_size(parsed)}
+
+    @mcp.tool()
+    async def ktt_explain_results(results_path: str, top_n: int = 5) -> dict[str, Any]:
+        """Read a KTT JSON results file and return a structured digest.
+
+        Top-N configurations, parameter sensitivity, failure breakdown.
+        """
+        return _explain(results_path, top_n=top_n)
+
+    @mcp.tool()
+    async def ktt_import_problem_yaml(problem_dir: str) -> dict[str, Any]:
+        """Convert this repo's legacy problem.yaml + params.json into a KttSpec.
+
+        problem_dir is the path to a directory containing problem.yaml and (optionally) params.json.
+        """
+        return _import_yaml(problem_dir)
+
+    @mcp.tool()
+    async def ktt_import_loader_json(loader_path: str) -> dict[str, Any]:
+        """Convert a KTT TuningLoader / Kernel Tuner JSON file into a KttSpec.
+
+        Returns the spec plus a list of warnings about features that didn't translate.
+        """
+        return _import_loader(loader_path)
+
+    log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
+    return mcp
