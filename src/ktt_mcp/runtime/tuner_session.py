@@ -392,9 +392,12 @@ def run_one(spec: KttSpec, *, config: dict[str, int | float], run_dir: Path,
             for name, value in config.items()
         ])
         result = sess.tuner.Run(sess.kernel_id, kc, [])
-    duration_us = getattr(result, "GetTotalDuration", lambda: None)()
+    # KernelResult.GetTotalDuration() always returns nanoseconds at the KTT API
+    # level — SetTimeUnit(Microseconds) only affects formatting in SaveResults /
+    # logs. Convert here so the {duration_us} contract is honest.
+    duration_ns = getattr(result, "GetTotalDuration", lambda: None)()
     status = getattr(result, "GetStatus", lambda: None)()
     return {
-        "duration_us": float(duration_us) if duration_us is not None else None,
+        "duration_us": float(duration_ns) / 1000.0 if duration_ns is not None else None,
         "status": _normalize_status(status),
     }

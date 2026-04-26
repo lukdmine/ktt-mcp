@@ -98,3 +98,33 @@ async def test_profile_returns_duration(fixtures_dir: Path, tmp_workdir: Path):
     assert structured["success"] is True
     assert structured["duration_us"] is None or structured["duration_us"] > 0
     assert isinstance(structured["counters"], dict)
+
+
+@pytest.mark.gpu
+@pytest.mark.asyncio
+async def test_run_and_tune_use_same_time_unit(fixtures_dir: Path, tmp_workdir: Path):
+    """Regression: ktt_run.timing.mean_us must be in microseconds, matching ktt_tune.
+
+    KTT's KernelResult.GetTotalDuration() returns nanoseconds at the API level,
+    while SaveResults applies the configured TimeUnit. If run_one forgets to
+    convert, ktt_run reports values 1000x larger than ktt_tune. Catch that here.
+    """
+    from ktt_mcp.server import build_server
+    server = build_server(workdir=str(tmp_workdir))
+    spec = _vector_add_spec(fixtures_dir)
+    cfg = {"BLOCK_X": 128}
+
+    _, run_out = await server.call_tool(
+        "ktt_run", {"spec": spec, "config": cfg, "iterations": 1}
+    )
+    spec_for_tune = dict(spec)
+    spec_for_tune["parameters"] = [{"name": "BLOCK_X", "values": [128]}]
+    spec_for_tune["stop"] = {"kind": "count", "value": 1}
+    _, tune_out = await server.call_tool("ktt_tune", {"spec": spec_for_tune, "top_n": 1})
+
+    assert run_out["success"] and tune_out["success"]
+    run_us = run_out["timing"]["mean_us"]
+    tune_us = tune_out["best"]["time_us"]
+    # both should be in the same unit, so within ~5x of each other for the same kernel/config
+    ratio = max(run_us, tune_us) / max(min(run_us, tune_us), 1e-9)
+    assert ratio < 5.0, f"run_us={run_us}, tune_us={tune_us}, ratio={ratio} — likely a unit mismatch"
