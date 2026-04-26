@@ -75,8 +75,56 @@ def _try_coerce_spec(spec: dict[str, Any] | str) -> tuple[KttSpec | None, dict[s
         return None, _err("spec", f"Could not load spec: {e}")
 
 
+SERVER_INSTRUCTIONS = """\
+ktt-mcp autotunes CUDA / OpenCL / Vulkan / C++ kernels via the Kernel Tuning Toolkit (KTT).
+
+WHEN TO USE THIS SERVER
+- Tuning block size, unroll factor, vector width, shared-memory layout, etc.
+- Single-config benchmarks, profiling counters, search-space sizing.
+- Importing existing KTT TuningLoader JSONs or `problem.yaml + params.json` problems.
+
+RECOMMENDED WORKFLOW
+1. ktt_describe_device → understand the target GPU (SM count, max threads, smem).
+2. Draft a KttSpec — read `ktt://schema/spec.json` for the schema and
+   `ktt://examples/vector-add/spec` for a complete example.
+3. ktt_search_space_size → confirm the budget is reasonable.
+4. ktt_validate → make sure ONE config compiles and produces correct output.
+5. ktt_tune → search the full space, returns best + top-N + a summary.
+6. ktt_profile → understand bottlenecks of the best config.
+
+THE `spec` PARAMETER on every tool accepts ANY of:
+- an inline KttSpec dict
+- a path to a `.json` or `.yaml` canonical KttSpec
+- a path to a directory containing `problem.yaml` (legacy format auto-converted)
+
+PATH RULES (IMPORTANT)
+- Paths inside a spec — `kernel.file`, `reference.file` — are resolved by KTT
+  on the server, not on the client. Always use ABSOLUTE paths to avoid surprises.
+- The same applies when you pass a path string as the `spec` itself.
+
+GOTCHAS
+- At least one vector must have `validate: true` AND a `reference` must be set
+  (kind=kernel or kind=cpu_c) for KTT to validate output. Otherwise the tuner
+  may pick fast-but-wrong configurations.
+- When grid/block dimensions depend on multiple parameters, prefer
+  `launch_config` (a custom launcher) over `thread_modifiers`.
+- Constraints prune the search space cheaply — use them to remove
+  block/warp/vector incompatibilities before the GPU sees them.
+
+ERRORS
+Every tool returns `{success: bool, ...}`. On failure, also `stage` (one of
+`spec`, `compile`, `launch`, `validate`, `tune`, `profile`, `io`, `run`) and
+`message`. Use `stage` to route the failure.
+
+DOCS
+- ktt://docs/best-practices, ktt://docs/searchers, ktt://docs/stop-conditions,
+  ktt://docs/profiling-counters
+- prompt_tune_cuda_kernel for guided first-time tuning.
+"""
+
+
 def build_server(*, workdir: str | None = None) -> FastMCP:
-    mcp = FastMCP("ktt-mcp")
+    mcp = FastMCP("ktt-mcp", instructions=SERVER_INSTRUCTIONS)
     workdir_mgr = WorkdirManager(workdir=workdir)
     gpu_lock = asyncio.Lock()
 

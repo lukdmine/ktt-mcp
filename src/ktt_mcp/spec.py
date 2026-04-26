@@ -39,17 +39,19 @@ class _Strict(BaseModel):
 
 
 class KernelRef(_Strict):
-    file: str
-    function: str
+    file: str = Field(
+        description="Absolute path to the kernel source file. Relative paths are resolved on the SERVER's cwd, so always pass absolute."
+    )
+    function: str = Field(description="Name of the kernel function (e.g. `vectorAdd`).")
 
 
 class DeviceRef(_Strict):
-    platform: int = 0
-    device: int = 0
+    platform: int = Field(default=0, description="Platform index from ktt_list_devices.")
+    device: int = Field(default=0, description="Device index from ktt_list_devices.")
 
 
 class Scalar(_Strict):
-    name: str
+    name: str = Field(description="Identifier injected as `-D<name>=<value>` and usable inside size/grid expressions.")
     dtype: Dtype = "int32"
     value: float | int
 
@@ -57,17 +59,28 @@ class Scalar(_Strict):
 class Vector(_Strict):
     name: str
     dtype: Dtype
-    size: str | int                       # expression resolvable against scalars
-    access: Access
-    init: InitMode = "zeros"
-    init_min: float | int | None = None
-    init_max: float | int | None = None
-    constant_value: float | int | None = None  # used when init == "constant"
-    validate_output: bool = Field(default=False, alias="validate")
+    size: str | int = Field(
+        description="Element count. May be an integer literal or an expression in scalar names (e.g. `M*N` if M and N are scalars)."
+    )
+    access: Access = Field(description="`read` for input buffers, `write` for output, `readwrite` for in-place.")
+    init: InitMode = Field(default="zeros", description="How to populate the buffer before the kernel runs.")
+    init_min: float | int | None = Field(
+        default=None, description="Lower bound when `init=random` (default -1.0 for floats, -2 for ints)."
+    )
+    init_max: float | int | None = Field(
+        default=None, description="Upper bound (exclusive for ints) when `init=random`."
+    )
+    constant_value: float | int | None = Field(
+        default=None, description="Fill value when `init=constant`."
+    )
+    validate_output: bool = Field(
+        default=False, alias="validate",
+        description="If true, KTT compares this buffer against the reference after each run. AT LEAST ONE vector must have validate=true (and a reference must be set) to catch incorrect kernels."
+    )
 
 
 class GridSpec(_Strict):
-    x: str | int
+    x: str | int = Field(description="Total threads / NDRange size in the X dim. Integer literal or expression in scalars (e.g. `N`).")
     y: str | int = 1
     z: str | int = 1
 
@@ -79,29 +92,38 @@ class BlockSpec(_Strict):
 
 
 class Parameter(_Strict):
-    name: str
-    values: list[int | float]
-    group: str = ""
+    name: str = Field(description="Tuning parameter name; injected as `-D<name>=<value>` into the kernel.")
+    values: list[int | float] = Field(description="Discrete set of values to try.")
+    group: str = Field(default="", description="Optional grouping for composite-kernel parameter independence.")
 
 
 class CompilerParameter(_Strict):
-    switch: str                            # e.g. "-use_fast_math" or "-arch="
-    values: list[str] = Field(default_factory=list)  # empty == binary toggle
+    switch: str = Field(
+        description="Compiler switch text. Empty `values=[]` makes it a binary toggle (e.g. `-use_fast_math`); non-empty appends the value (e.g. switch=`-arch=` with values=[`sm_80`]→ `-arch=sm_80`)."
+    )
+    values: list[str] = Field(default_factory=list)
 
 
 class Constraint(_Strict):
-    params: list[str]
-    expr: str
+    params: list[str] = Field(description="Parameter (and optional scalar) names referenced by `expr`.")
+    expr: str = Field(
+        description="Python boolean expression; combos that evaluate True are kept. Example: `BLOCK_X * BLOCK_Y <= 1024`. ZeroDivisionError → invalid (combo dropped)."
+    )
 
 
 class ThreadModifier(_Strict):
-    type: ModifierType
+    type: ModifierType = Field(description="`Local` modifies block size; `Global` modifies grid size.")
     dim: ModifierDim
-    param: str
+    param: str = Field(description="Tuning parameter whose value drives the modification.")
     action: ModifierAction
 
 
 class LaunchConfig(_Strict):
+    """Custom launcher: grid/block as Python expressions in scalars + parameter values.
+
+    Use this INSTEAD of thread_modifiers when grid/block depend on multiple parameters
+    (e.g. `grid_x = (N + BX - 1) // BX`). When both are present, launch_config wins.
+    """
     grid_x: str = "1"
     grid_y: str = "1"
     grid_z: str = "1"
@@ -111,17 +133,20 @@ class LaunchConfig(_Strict):
 
 
 class ValidationSpec(_Strict):
-    method: ValidationMethod = "SideBySideComparison"
-    tolerance: float = 1e-4
-    range: int | None = None
+    method: ValidationMethod = Field(default="SideBySideComparison", description="How KTT compares output to reference.")
+    tolerance: float = Field(default=1e-4, description="Absolute or relative tolerance depending on method.")
+    range: int | None = Field(default=None, description="Optionally validate only the first N elements.")
 
 
 class ReferenceSpec(_Strict):
-    kind: ReferenceKind = "none"
-    file: str | None = None
-    function: str | None = None
-    block_x: int = 8
-    block_y: int = 8
+    kind: ReferenceKind = Field(
+        default="none",
+        description="`none` (no validation), `kernel` (CUDA reference kernel), or `cpu_c` (compiled C/C++ reference function — wrap in `extern \"C\"`)."
+    )
+    file: str | None = Field(default=None, description="Absolute path to the reference source. Required when kind != none.")
+    function: str | None = Field(default=None, description="Reference function name. Required when kind != none.")
+    block_x: int = Field(default=8, description="Reference kernel block size X (only used when kind=kernel).")
+    block_y: int = Field(default=8, description="Reference kernel block size Y.")
 
     @model_validator(mode="after")
     def _check_kind(self) -> "ReferenceSpec":
@@ -134,23 +159,43 @@ class ReferenceSpec(_Strict):
 
 
 class SearcherSpec(_Strict):
-    name: SearcherName = "Random"
-    options: dict[str, Any] = Field(default_factory=dict)
+    name: SearcherName = Field(
+        default="Random",
+        description="Search strategy. `Deterministic` (small spaces), `Random` (default), `MCMC` (smooth landscapes — opt `seed`), `ProfileBased` (needs `model_path`). See ktt://docs/searchers."
+    )
+    options: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Searcher-specific options (e.g. `{seed: 42}` for MCMC, `{model_path: ...}` for ProfileBased)."
+    )
 
 
 class StopSpec(_Strict):
-    kind: StopKind
+    kind: StopKind = Field(
+        description="`duration` (seconds), `count` (configs), `fraction` (of space), `target_time` (stop on a config faster than `value` µs)."
+    )
     value: float
 
 
 class ProfilingSpec(_Strict):
-    enabled: bool = False
-    counters: list[str] = Field(default_factory=list)
+    enabled: bool = Field(default=False, description="If true, KTT runs each config under CUPTI; significantly slower.")
+    counters: list[str] = Field(
+        default_factory=list,
+        description="NVPerf counter names; empty = KTT default set. See ktt://docs/profiling-counters."
+    )
 
 
 # --- top-level model ---
 
 class KttSpec(_Strict):
+    """Canonical KTT tuning specification.
+
+    Workflow: ktt_describe_device → draft this spec → ktt_search_space_size →
+    ktt_validate one config → ktt_tune. See server-level instructions.
+
+    All file paths (kernel.file, reference.file) MUST be absolute — KTT
+    resolves them on the server's filesystem, not the client's.
+    """
+
     kernel: KernelRef
     compute_api: ComputeApi = "cuda"
     device: DeviceRef = Field(default_factory=DeviceRef)
@@ -166,8 +211,11 @@ class KttSpec(_Strict):
     constraints: list[Constraint] = Field(default_factory=list)
     thread_modifiers: list[ThreadModifier] = Field(default_factory=list)
 
-    launch_config: LaunchConfig | None = None
-    compiler_options: str = ""
+    launch_config: LaunchConfig | None = Field(
+        default=None,
+        description="Custom Python expressions for grid/block. Use INSTEAD of thread_modifiers when dimensions depend on multiple parameters."
+    )
+    compiler_options: str = Field(default="", description="Free-form NVRTC/compiler options string (e.g. `-O3 -arch=sm_80`).")
 
     validation: ValidationSpec = Field(default_factory=ValidationSpec)
     reference: ReferenceSpec = Field(default_factory=ReferenceSpec)
