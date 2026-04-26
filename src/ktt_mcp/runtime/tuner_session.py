@@ -275,7 +275,7 @@ def _build(spec: KttSpec, *, run_dir: Path) -> BuiltSession:
         def launcher(compute_interface):
             ctx = dict(scalar_ctx)
             for pair in compute_interface.GetCurrentConfiguration().GetPairs():
-                ctx[pair.GetName()] = pair.GetValueUint()
+                ctx[pair.GetName()] = pair.GetValue()
             gx = _safe_eval_int(lc.grid_x, ctx)
             gy = _safe_eval_int(lc.grid_y, ctx)
             gz = _safe_eval_int(lc.grid_z, ctx)

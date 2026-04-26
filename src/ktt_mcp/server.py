@@ -16,6 +16,7 @@ from ktt_mcp.tools.explain_results import explain_results as _explain
 from ktt_mcp.tools.import_loader import import_loader_json as _import_loader
 from ktt_mcp.tools.import_yaml import import_problem_yaml as _import_yaml
 from ktt_mcp.tools.search_space import compute_search_space_size
+from ktt_mcp.tools.validate import validate as _validate
 from ktt_mcp.workdir import WorkdirManager
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,22 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
         """Get detailed capabilities for a specific device."""
         async with gpu_lock:
             return _describe_device(compute_api=compute_api, platform=platform, device=device)
+
+    @mcp.tool()
+    async def ktt_validate(
+        spec: dict[str, Any] | str,
+        config: dict[str, int | float],
+    ) -> dict[str, Any]:
+        """Compile, launch, and validate a kernel + config without timing.
+
+        config is a flat name -> int/float map. Returns valid pass/fail and the run_id.
+        """
+        try:
+            parsed = _coerce_spec(spec)
+        except ValidationError as e:
+            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        async with gpu_lock:
+            return _validate(spec=parsed, config=config, workdir_mgr=workdir_mgr)
 
     log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
     return mcp
