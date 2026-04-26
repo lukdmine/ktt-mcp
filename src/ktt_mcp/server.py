@@ -208,5 +208,26 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
             return json.dumps({"error": f"no results.json for run_id={run_id}"})
         return results.read_text()
 
+    from ktt_mcp.prompts.templates import (
+        iterate_on_kernel,
+        port_from_tuning_loader,
+        tune_cuda_kernel,
+    )
+
+    @mcp.prompt()
+    def prompt_tune_cuda_kernel(kernel_file: str, function_name: str = "") -> str:
+        """Walk through tuning a CUDA kernel: describe device, draft spec, validate, tune."""
+        return tune_cuda_kernel(kernel_file, function_name or None)
+
+    @mcp.prompt()
+    def prompt_iterate_on_kernel(kernel_file: str, iterations: int = 5) -> str:
+        """Iterative kernel-optimisation loop: validate -> tune -> profile -> rewrite."""
+        return iterate_on_kernel(kernel_file, iterations)
+
+    @mcp.prompt()
+    def prompt_port_from_tuning_loader(loader_json_path: str) -> str:
+        """Convert a KTT TuningLoader JSON to a ktt-mcp spec."""
+        return port_from_tuning_loader(loader_json_path)
+
     log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
     return mcp

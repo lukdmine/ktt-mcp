@@ -44,3 +44,12 @@ async def test_resources_listed(tmp_workdir):
     assert "ktt://schema/spec.json" in uris
     assert "ktt://docs/searchers" in uris
     assert "ktt://examples/vector-add/spec" in uris
+
+
+@pytest.mark.asyncio
+async def test_prompts_listed(tmp_workdir):
+    from ktt_mcp.server import build_server
+    server = build_server(workdir=str(tmp_workdir))
+    names = sorted(p.name for p in await server.list_prompts())
+    for required in ["prompt_tune_cuda_kernel", "prompt_iterate_on_kernel", "prompt_port_from_tuning_loader"]:
+        assert required in names
