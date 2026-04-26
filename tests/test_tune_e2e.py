@@ -69,3 +69,18 @@ async def test_run_returns_timing(fixtures_dir: Path, tmp_workdir: Path):
     assert structured["success"] is True
     assert structured["timing"]["mean_us"] > 0
     assert structured["timing"]["iterations"] == 3
+
+
+@pytest.mark.gpu
+@pytest.mark.asyncio
+async def test_tune_finds_best_config(fixtures_dir: Path, tmp_workdir: Path):
+    from ktt_mcp.server import build_server
+    server = build_server(workdir=str(tmp_workdir))
+    spec = _vector_add_spec(fixtures_dir)
+    spec["stop"] = {"kind": "duration", "value": 8.0}
+    _content, structured = await server.call_tool("ktt_tune", {"spec": spec, "top_n": 3})
+    assert structured["success"] is True
+    assert structured["best"] is not None
+    assert structured["best"]["time_us"] > 0
+    assert len(structured["top"]) >= 1
+    assert Path(structured["results_file"]).exists()

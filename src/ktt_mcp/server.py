@@ -17,6 +17,7 @@ from ktt_mcp.tools.import_loader import import_loader_json as _import_loader
 from ktt_mcp.tools.import_yaml import import_problem_yaml as _import_yaml
 from ktt_mcp.tools.run import run_config as _run_config
 from ktt_mcp.tools.search_space import compute_search_space_size
+from ktt_mcp.tools.tune import tune as _tune
 from ktt_mcp.tools.validate import validate as _validate
 from ktt_mcp.workdir import WorkdirManager
 
@@ -123,6 +124,23 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
             return _err("spec", "Invalid KttSpec.", errors=e.errors())
         async with gpu_lock:
             return _run_config(spec=parsed, config=config, workdir_mgr=workdir_mgr, iterations=iterations)
+
+    @mcp.tool()
+    async def ktt_tune(
+        spec: dict[str, Any] | str,
+        top_n: int = 5,
+    ) -> dict[str, Any]:
+        """Run full autotuning. Returns best config, top-N, and a summary string.
+
+        The full results JSON is at the returned `results_file` path; pass it
+        back to ktt_explain_results for deeper analysis.
+        """
+        try:
+            parsed = _coerce_spec(spec)
+        except ValidationError as e:
+            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        async with gpu_lock:
+            return _tune(spec=parsed, workdir_mgr=workdir_mgr, top_n=top_n)
 
     log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
     return mcp
