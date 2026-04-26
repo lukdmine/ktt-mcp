@@ -36,6 +36,20 @@ _VECTOR_METHOD = {
 }
 
 
+def _normalize_status(status: Any) -> str:
+    """KTT's ResultStatus enum stringifies as 'ResultStatus.Ok'; we want just 'Ok'.
+
+    Falls back to 'Unknown' if status is None.
+    """
+    if status is None:
+        return "Unknown"
+    name = getattr(status, "name", None)
+    if name:
+        return str(name)
+    raw = str(status)
+    return raw.rsplit(".", 1)[-1] or "Unknown"
+
+
 def _eval_int(expr: Any, scalars: dict[str, int]) -> int:
     if isinstance(expr, int):
         return expr
@@ -382,5 +396,5 @@ def run_one(spec: KttSpec, *, config: dict[str, int | float], run_dir: Path,
     status = getattr(result, "GetStatus", lambda: None)()
     return {
         "duration_us": float(duration_us) if duration_us is not None else None,
-        "status": str(status) if status is not None else "Unknown",
+        "status": _normalize_status(status),
     }
