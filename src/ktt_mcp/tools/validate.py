@@ -26,7 +26,7 @@ def validate(
     try:
         info = run_one(spec, config=config, run_dir=artefacts.run_dir, validate_only=True)
     except Exception as e:
-        return {"success": False, "stage": "tune", "message": str(e), "run_id": run_id}
+        return {"success": False, "stage": "validate", "message": str(e), "run_id": run_id}
     valid = info["status"] in ("Ok", "Unknown")
     return {
         "success": True,

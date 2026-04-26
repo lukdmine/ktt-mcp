@@ -37,7 +37,8 @@ Or write to `.mcp.json` directly (see `.mcp.json.example`).
 | `ktt_profile` | Run a config with CUPTI profiling counters. |
 | `ktt_validate` | Compile + launch + validate without timing. |
 | `ktt_search_space_size` | Count valid configs in a spec without GPU. |
-| `ktt_list_devices` / `ktt_describe_device` | GPU discovery + capabilities. |
+| `ktt_list_devices` | List available platforms and devices for a compute API. |
+| `ktt_describe_device` | Detailed capabilities of a specific device. |
 | `ktt_explain_results` | Structured digest of a KTT JSON results file. |
 | `ktt_import_loader_json` | Translate KTT TuningLoader JSON to a ktt-mcp spec. |
 | `ktt_import_problem_yaml` | Translate this repo's `problem.yaml + params.json` to a ktt-mcp spec. |

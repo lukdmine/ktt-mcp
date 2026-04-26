@@ -37,6 +37,10 @@ KTT exposes CUPTI counters under their NVPerf names. The default set is curated 
 - `smsp__sass_average_branch_targets_threads_uniform.pct` - branch divergence
 
 Pass an explicit `counters` list to ktt_profile to use a custom set.
+
+## Implementation note
+
+The current implementation parses counter values out of KTT's redirected stderr log. It is best-effort: if KTT's log format changes or the binary was built without CUPTI/NVPerf support, `counters` will return as an empty dict while timing is still accurate. The default counter list is documented above; pass `counters=null` to receive only timing.
 """
 
 BEST_PRACTICES_DOC = """\

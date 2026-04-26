@@ -44,9 +44,6 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
     workdir_mgr = WorkdirManager(workdir=workdir)
     gpu_lock = asyncio.Lock()
 
-    # expose for downstream tasks (Task 10+) to import
-    mcp.state = {"workdir": workdir_mgr, "gpu_lock": gpu_lock}  # type: ignore[attr-defined]
-
     @mcp.tool()
     async def ktt_search_space_size(spec: dict[str, Any] | str) -> dict[str, Any]:
         """Count valid configurations in a KTT spec without running anything.

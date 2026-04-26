@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ktt_mcp.runtime.pyktt_loader import load_pyktt
 from ktt_mcp.runtime.tuner_session import run_one
 from ktt_mcp.spec import KttSpec
 from ktt_mcp.workdir import WorkdirManager, compute_run_id

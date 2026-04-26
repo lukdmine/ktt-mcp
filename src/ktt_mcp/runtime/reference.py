@@ -65,6 +65,7 @@ def build_cpu_reference_callback(
     scalars: list[dict[str, Any]],
     validated_vector_index: int,
     build_dir: Path,
+    target_size: int,
 ) -> tuple[Callable[[Any], None], int]:
     so = _compile_reference(source_path, build_dir, _build_scalar_defines(scalars))
     lib = ctypes.CDLL(str(so))
@@ -79,7 +80,6 @@ def build_cpu_reference_callback(
 
     target_vec = vectors[validated_vector_index]
     target_dtype = np.dtype(_NUMPY_BY_DTYPE[target_vec["dtype"]])
-    target_size = int(target_vec["size"])
     reference_size_bytes = target_size * target_dtype.itemsize
 
     def callback(buffer_view: Any) -> None:
@@ -93,7 +93,7 @@ def build_cpu_reference_callback(
             elif vec["access"] == "read":
                 ptrs.append(vector_data[idx].ctypes.data_as(ptr_t))
             else:
-                tmp = np.zeros(int(vec["size"]), dtype=_NUMPY_BY_DTYPE[vec["dtype"]])
+                tmp = np.zeros(vector_data[idx].size, dtype=_NUMPY_BY_DTYPE[vec["dtype"]])
                 scratch.append(tmp)
                 ptrs.append(tmp.ctypes.data_as(ptr_t))
         cpu_fn(*ptrs)

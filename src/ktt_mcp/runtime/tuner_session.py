@@ -10,10 +10,9 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -202,7 +201,7 @@ def _build(spec: KttSpec, *, run_dir: Path) -> BuiltSession:
     tuner.SetGlobalSizeType(ktt.GlobalSizeType.CUDA)
     tuner.SetTimeUnit(ktt.TimeUnit.Microseconds)
 
-    scalar_values_int = {s.name: int(s.value) for s in spec.scalars if s.dtype.startswith("int")}
+    scalar_values_int = {s.name: int(s.value) for s in spec.scalars}
     base_grid_x = _eval_int(spec.grid.x, scalar_values_int)
     base_grid_y = _eval_int(spec.grid.y, scalar_values_int)
     base_grid_z = _eval_int(spec.grid.z, scalar_values_int)
@@ -341,6 +340,7 @@ def _build(spec: KttSpec, *, run_dir: Path) -> BuiltSession:
                     scalars=[s.model_dump() for s in spec.scalars],
                     validated_vector_index=idx,
                     build_dir=run_dir,
+                    target_size=int(vector_data[idx].size),
                 )
                 tuner.SetReferenceComputation(aid, ref_size, cb)
 

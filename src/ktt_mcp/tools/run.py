@@ -32,7 +32,7 @@ def run_config(
         try:
             info = run_one(spec, config=config, run_dir=artefacts.run_dir)
         except Exception as e:
-            return {"success": False, "stage": "tune", "message": str(e), "run_id": run_id}
+            return {"success": False, "stage": "run", "message": str(e), "run_id": run_id}
         if info["duration_us"] is not None:
             durations.append(info["duration_us"])
         last_status = info["status"]
