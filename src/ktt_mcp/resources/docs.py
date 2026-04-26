@@ -38,9 +38,33 @@ KTT exposes CUPTI counters under their NVPerf names. The default set is curated 
 
 Pass an explicit `counters` list to ktt_profile to use a custom set.
 
-## Implementation note
+## Two preconditions for non-empty counters
 
-The current implementation parses counter values out of KTT's redirected stderr log. It is best-effort: if KTT's log format changes or the binary was built without CUPTI/NVPerf support, `counters` will return as an empty dict while timing is still accurate. The default counter list is documented above; pass `counters=null` to receive only timing.
+KTT profiling has two gates. If `ktt_profile` returns `profiling_status` other than `"ok"`, check both:
+
+1. **KTT build flag.** `pyktt.so` must have been built with `--profiling=cupti` (or `--profiling=cupti-legacy`). Without it, `SetProfiling(True)` silently does nothing — `profiling_status` will be `"no_profiling_data"`. To rebuild:
+   ```
+   cd KTT
+   ./premake5 gmake --python --profiling=cupti
+   cd Build && make config=release_x86_64
+   ```
+
+2. **CUPTI permissions.** Modern NVIDIA drivers (440+) restrict CUPTI access to root by default. Allow non-root profiling once: create `/etc/modprobe.d/nvidia.conf` with:
+   ```
+   options nvidia NVreg_RestrictProfilingToAdminUsers=0
+   ```
+   then reboot. Verify with `cat /proc/driver/nvidia/params | grep RestrictProfiling`. Without this, `SetProfiling(True)` runs but counter values come back zero or missing.
+
+## profiling_status values
+
+`ktt_profile` returns:
+- `"ok"` — counters were collected.
+- `"no_profiling_data"` — no `ComputationResult` had profiling data attached. Almost always means the build flag is missing or CUPTI is denied.
+- `"no_counters_returned"` — profiling ran, but the requested counter names didn't exist on this device/build. Try a smaller set or check the names match KTT's NVPerf naming.
+
+## How counter collection works
+
+KTT typically needs MULTIPLE Run() invocations of the same config to gather every counter — each pass collects a subset. `ktt_profile` loops on `HasRemainingProfilingRuns()` (capped at 100) and reports `profiling_iterations` so you can see how many passes were needed.
 """
 
 BEST_PRACTICES_DOC = """\

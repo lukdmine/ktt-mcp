@@ -98,6 +98,14 @@ async def test_profile_returns_duration(fixtures_dir: Path, tmp_workdir: Path):
     assert structured["success"] is True
     assert structured["duration_us"] is None or structured["duration_us"] > 0
     assert isinstance(structured["counters"], dict)
+    assert structured["profiling_status"] in (
+        "ok", "no_profiling_data", "no_counters_returned",
+    )
+    if structured["profiling_status"] == "ok":
+        assert structured["counters"], "profiling_status=ok but no counters returned"
+    else:
+        # When profiling isn't available the message must explain why.
+        assert structured.get("profiling_message")
 
 
 @pytest.mark.gpu

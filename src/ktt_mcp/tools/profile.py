@@ -1,4 +1,8 @@
-"""Profile a single configuration with CUPTI counters."""
+"""Profile a single configuration with CUPTI counters.
+
+Calls into runtime.tuner_session.run_profile, which loops on
+HasRemainingProfilingRuns() so all requested counters get collected.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +10,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ktt_mcp.runtime.tuner_session import run_one
+from ktt_mcp.runtime.tuner_session import run_profile
 from ktt_mcp.spec import KttSpec
 from ktt_mcp.workdir import WorkdirManager, compute_run_id
 
 # Curated default counters useful to a kernel-rewriting LLM. Names match KTT's
-# native counter set; not all are available on every device.
+# native counter set; not all are available on every device or every build.
 DEFAULT_COUNTERS = [
     "smsp__sass_thread_inst_executed_op_fadd_pred_on.sum",
     "smsp__sass_thread_inst_executed_op_ffma_pred_on.sum",
@@ -42,33 +46,21 @@ def profile(
     )
 
     try:
-        info = run_one(
-            spec, config=config, run_dir=artefacts.run_dir, profile=True, counters=chosen,
+        info = run_profile(
+            spec, config=config, counters=chosen, run_dir=artefacts.run_dir,
         )
     except Exception as e:
         return {"success": False, "stage": "profile", "message": str(e), "run_id": run_id}
-
-    # KTT exposes counter values through KernelResult; the runtime currently returns only timing.
-    # We capture counters by reading them out of the redirected stderr.log if KTT printed them.
-    # If profiling isn't built into the KTT binary, the counter dict will be empty and timing-only.
-    counter_values: dict[str, float] = {}
-    log_path = artefacts.run_dir / "stderr.log"
-    if log_path.exists():
-        for line in log_path.read_text().splitlines():
-            for c in chosen:
-                if c in line and "=" in line:
-                    try:
-                        _, raw = line.split("=", 1)
-                        counter_values[c] = float(raw.strip().split()[0])
-                    except Exception:
-                        pass
 
     profile_path = artefacts.run_dir / "profile.json"
     profile_path.write_text(json.dumps({
         "config": config,
         "duration_us": info["duration_us"],
         "counters_requested": chosen,
-        "counters": counter_values,
+        "counters": info["counters"],
+        "counters_by_kernel": info["counters_by_kernel"],
+        "profiling_status": info["profiling_status"],
+        "profiling_iterations": info["profiling_iterations"],
     }, indent=2))
 
     return {
@@ -77,7 +69,11 @@ def profile(
         "run_dir": str(artefacts.run_dir),
         "config": config,
         "duration_us": info["duration_us"],
-        "counters": counter_values,
+        "counters": info["counters"],
         "counters_requested": chosen,
+        "counters_by_kernel": info["counters_by_kernel"],
+        "profiling_iterations": info["profiling_iterations"],
+        "profiling_status": info["profiling_status"],
+        "profiling_message": info["profiling_message"],
         "profile_file": str(profile_path),
     }

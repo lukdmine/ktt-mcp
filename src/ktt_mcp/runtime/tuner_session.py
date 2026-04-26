@@ -401,3 +401,122 @@ def run_one(spec: KttSpec, *, config: dict[str, int | float], run_dir: Path,
         "duration_us": float(duration_ns) / 1000.0 if duration_ns is not None else None,
         "status": _normalize_status(status),
     }
+
+
+_COUNTER_GETTER = {
+    "Int": "GetValueInt",
+    "UnsignedInt": "GetValueUint",
+    "Double": "GetValueDouble",
+    "Percent": "GetValueDouble",
+    "Throughput": "GetValueDouble",
+    "UtilizationLevel": "GetValueInt",
+}
+
+
+def _extract_counters(ktt, result: Any) -> dict[str, dict[str, Any]]:
+    """Pull profiling counters out of a KernelResult via the proper KTT API.
+
+    Returns {definition_name: {counter_name: {"value": ..., "type": "..."}}}.
+    Empty dict if no profiling data was collected.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    comp_results = getattr(result, "GetResults", lambda: [])()
+    for cr in comp_results:
+        if not getattr(cr, "HasProfilingData", lambda: False)():
+            continue
+        prof = cr.GetProfilingData()
+        if not prof or not prof.IsValid():
+            continue
+        kernel_name = cr.GetKernelFunction() if hasattr(cr, "GetKernelFunction") else "kernel"
+        bucket: dict[str, Any] = {}
+        for c in prof.GetCounters():
+            type_name = c.GetType().name if hasattr(c.GetType(), "name") else str(c.GetType())
+            getter = _COUNTER_GETTER.get(type_name, "GetValueDouble")
+            try:
+                value = getattr(c, getter)()
+            except Exception:
+                try:
+                    value = c.GetValueDouble()
+                except Exception:
+                    value = None
+            bucket[c.GetName()] = {"value": value, "type": type_name}
+        out[kernel_name] = bucket
+    return out
+
+
+def run_profile(
+    spec: KttSpec,
+    *,
+    config: dict[str, int | float],
+    counters: list[str] | None,
+    run_dir: Path,
+    max_iterations: int = 100,
+) -> dict[str, Any]:
+    """Run a single config with profiling enabled, looping until KTT signals all counters collected.
+
+    KTT typically needs multiple Run() invocations to gather every requested counter
+    (each pass collects a subset). We loop while `HasRemainingProfilingRuns()` returns
+    True, capped at `max_iterations` to avoid infinite loops on misbuilt KTTs.
+
+    Returns the LAST KernelResult's data plus the extracted counters and a
+    `profiling_status` field that distinguishes "ok" from "no_profiling_data"
+    (build/permissions issue) and "no_counters_returned" (counters configured
+    but none came back).
+    """
+    log_path = run_dir / "stderr.log"
+    with _redirect_to(log_path):
+        sess = _build(spec, run_dir=run_dir)
+        sess.tuner.SetProfiling(True)
+        if counters:
+            sess.tuner.SetProfilingCounters(list(counters))
+        kc = sess.ktt.KernelConfiguration([
+            sess.ktt.ParameterPair(name, int(value)) if isinstance(value, int)
+            else sess.ktt.ParameterPair(name, float(value))
+            for name, value in config.items()
+        ])
+        iterations = 0
+        result = None
+        while iterations < max_iterations:
+            result = sess.tuner.Run(sess.kernel_id, kc, [])
+            iterations += 1
+            if not getattr(result, "HasRemainingProfilingRuns", lambda: False)():
+                break
+
+    duration_ns = getattr(result, "GetTotalDuration", lambda: None)() if result else None
+    status = getattr(result, "GetStatus", lambda: None)() if result else None
+    extracted = _extract_counters(sess.ktt, result) if result else {}
+
+    # Flatten across kernel definitions for the common simple-kernel case;
+    # callers can still inspect per-definition via `counters_by_kernel`.
+    flat: dict[str, Any] = {}
+    for bucket in extracted.values():
+        for name, info in bucket.items():
+            flat[name] = info["value"]
+
+    if not extracted:
+        profiling_status = "no_profiling_data"
+        message = (
+            "KTT returned no profiling data. Likely cause: pyktt was built without "
+            "profiling support (rebuild with `--profiling=cupti`), or CUPTI permissions "
+            "are restricted (set `nvidia NVreg_RestrictProfilingToAdminUsers=0` and reboot, "
+            "or run as root)."
+        )
+    elif not flat:
+        profiling_status = "no_counters_returned"
+        message = (
+            "Profiling ran but no counter values were returned. The requested counter names "
+            "may not be available on this device or KTT build."
+        )
+    else:
+        profiling_status = "ok"
+        message = None
+
+    return {
+        "duration_us": float(duration_ns) / 1000.0 if duration_ns is not None else None,
+        "status": _normalize_status(status),
+        "counters": flat,
+        "counters_by_kernel": extracted,
+        "profiling_iterations": iterations,
+        "profiling_status": profiling_status,
+        "profiling_message": message,
+    }

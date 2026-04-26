@@ -116,6 +116,12 @@ Every tool returns `{success: bool, ...}`. On failure, also `stage` (one of
 `spec`, `compile`, `launch`, `validate`, `tune`, `profile`, `io`, `run`) and
 `message`. Use `stage` to route the failure.
 
+PROFILING NOTES
+ktt_profile additionally returns `profiling_status`: `"ok"` (counters collected),
+`"no_profiling_data"` (KTT not built with --profiling, or CUPTI permissions denied),
+or `"no_counters_returned"` (counter names invalid for this device). Read
+ktt://docs/profiling-counters when status != "ok".
+
 DOCS
 - ktt://docs/best-practices, ktt://docs/searchers, ktt://docs/stop-conditions,
   ktt://docs/profiling-counters
