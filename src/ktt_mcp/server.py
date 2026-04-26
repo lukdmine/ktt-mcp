@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,56 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
             return _err("spec", "Invalid KttSpec.", errors=e.errors())
         async with gpu_lock:
             return _profile(spec=parsed, config=config, counters=counters, workdir_mgr=workdir_mgr)
+
+    # ----- resources -----
+    examples_dir = Path(__file__).parent / "resources" / "examples"
+    from ktt_mcp.resources.schema import schema_text
+    from ktt_mcp.resources.docs import (
+        BEST_PRACTICES_DOC,
+        PROFILING_COUNTERS_DOC,
+        SEARCHERS_DOC,
+        STOP_CONDITIONS_DOC,
+    )
+
+    @mcp.resource("ktt://schema/spec.json")
+    async def res_schema() -> str:
+        return schema_text()
+
+    @mcp.resource("ktt://docs/searchers")
+    async def res_searchers() -> str:
+        return SEARCHERS_DOC
+
+    @mcp.resource("ktt://docs/stop-conditions")
+    async def res_stops() -> str:
+        return STOP_CONDITIONS_DOC
+
+    @mcp.resource("ktt://docs/profiling-counters")
+    async def res_counters() -> str:
+        return PROFILING_COUNTERS_DOC
+
+    @mcp.resource("ktt://docs/best-practices")
+    async def res_practices() -> str:
+        return BEST_PRACTICES_DOC
+
+    @mcp.resource("ktt://examples/vector-add/spec")
+    async def res_example_spec() -> str:
+        return (examples_dir / "vector_add.json").read_text()
+
+    @mcp.resource("ktt://examples/vector-add/kernel")
+    async def res_example_kernel() -> str:
+        return (examples_dir / "vector_add.cu").read_text()
+
+    @mcp.resource("ktt://examples/vector-add/reference")
+    async def res_example_ref() -> str:
+        return (examples_dir / "vector_add_ref.cu").read_text()
+
+    @mcp.resource("ktt://runs/{run_id}")
+    async def res_run(run_id: str) -> str:
+        rd = workdir_mgr.run_dir(run_id)
+        results = rd / "results.json"
+        if not results.exists():
+            return json.dumps({"error": f"no results.json for run_id={run_id}"})
+        return results.read_text()
 
     log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
     return mcp

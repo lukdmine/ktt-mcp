@@ -34,3 +34,13 @@ async def test_search_space_tool_callable(tmp_workdir):
     _content, structured = await server.call_tool("ktt_search_space_size", {"spec": spec})
     assert structured["total"] == 6
     assert structured["after_constraints"] == 6
+
+
+@pytest.mark.asyncio
+async def test_resources_listed(tmp_workdir):
+    from ktt_mcp.server import build_server
+    server = build_server(workdir=str(tmp_workdir))
+    uris = sorted(str(r.uri) for r in await server.list_resources())
+    assert "ktt://schema/spec.json" in uris
+    assert "ktt://docs/searchers" in uris
+    assert "ktt://examples/vector-add/spec" in uris
