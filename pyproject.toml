@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ktt-mcp"
+version = "0.1.0"
+description = "MCP server exposing the Kernel Tuning Toolkit (KTT) for CUDA kernel autotuning."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+  "mcp[cli]>=1.2.0",
+  "pydantic>=2.5",
+  "numpy>=1.24",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+ktt-mcp = "ktt_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ktt_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+  "gpu: requires CUDA + pyktt.so available at runtime",
+]
