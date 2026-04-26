@@ -1,0 +1,43 @@
+{
+  "ConfigurationSpace": {
+    "TuningParameters": [
+      {"Name": "MWG", "Type": "uint", "Values": "[16, 32, 64]"},
+      {"Name": "VWM", "Type": "uint", "Values": "[1, 2, 4]"}
+    ],
+    "Conditions": [
+      {"Parameters": ["MWG", "VWM"], "Expression": "MWG % VWM == 0"}
+    ]
+  },
+  "Search": {"Name": "Random"},
+  "Budget": [
+    {"Type": "TuningDuration", "BudgetValue": 30.0}
+  ],
+  "General": {
+    "TimeUnit": "Microseconds",
+    "OutputFile": "out",
+    "OutputFormat": "JSON"
+  },
+  "KernelSpecification": {
+    "Language": "CUDA",
+    "KernelName": "vectorAdd",
+    "KernelFile": "kernel.cu",
+    "Profiling": false,
+    "GlobalSize": {"X": "1048576 / VWM"},
+    "LocalSize":  {"X": "MWG"},
+    "GlobalSizeType": "CUDA",
+    "Arguments": [
+      {"Name": "a",      "Type": "float", "Size": 1048576, "FillType": "Random",
+       "FillValue": 1.0, "AccessType": "ReadOnly", "MemoryType": "Vector"},
+      {"Name": "b",      "Type": "float", "Size": 1048576, "FillType": "Random",
+       "FillValue": 1.0, "AccessType": "ReadOnly", "MemoryType": "Vector"},
+      {"Name": "result", "Type": "float", "Size": 1048576, "FillType": "Constant",
+       "FillValue": 0.0, "AccessType": "WriteOnly", "MemoryType": "Vector"},
+      {"Name": "scalar", "Type": "float", "FillValue": 3.0, "MemoryType": "Scalar"}
+    ],
+    "ReferenceArguments": [
+      {"Name": "ref", "FillType": "Generator", "DataSource": "2 * i + 3",
+       "TargetName": "result", "ValidationMethod": "SideBySideComparison",
+       "ValidationThreshold": 0.1}
+    ]
+  }
+}
