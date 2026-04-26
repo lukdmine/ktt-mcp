@@ -102,13 +102,23 @@ PATH RULES (IMPORTANT)
   on the server, not on the client. Always use ABSOLUTE paths to avoid surprises.
 - The same applies when you pass a path string as the `spec` itself.
 
-KERNEL ARGUMENT MODEL (IMPORTANT)
+KERNEL ARGUMENT MODEL (IMPORTANT, varies by compute_api)
+
+GPU backends (`cuda`/`opencl`/`vulkan`):
 - `vectors` become positional kernel arguments in declaration order. The kernel
   function signature must list those pointers and only those.
 - `scalars` and tuning `parameters` are injected as `-D<name>=<value>` PREPROCESSOR
   DEFINES, not runtime arguments. In the kernel, refer to them as bare identifiers
   (e.g. `if (i < N)`, `#if BLOCK_X >= 64`). Adding an `int N` parameter to the
   function signature will produce a compile error after preprocessing.
+
+CPU backend (`compute_api: cpp`):
+- KTT autotunes host C/C++ kernels via JIT-compiled g++. KTT FIXES the signature:
+  `extern "C" void kernelName(void** buffers, size_t* sizes)`. Vectors arrive in
+  `buffers[i]` (cast to your dtype); buffer byte lengths are in `sizes[i]`.
+  `scalars` and `parameters` are still `-D` defines, so use them as bare
+  identifiers in the body. This path is functional but not yet exercised by
+  our test suite — treat as preview.
 
 GOTCHAS
 - At least one vector must have `validate: true` AND a `reference` must be set

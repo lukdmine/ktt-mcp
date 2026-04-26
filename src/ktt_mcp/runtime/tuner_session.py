@@ -198,7 +198,11 @@ def _build(spec: KttSpec, *, run_dir: Path) -> BuiltSession:
     ktt = load_pyktt()
     api = getattr(ktt.ComputeApi, _COMPUTE_API[spec.compute_api])
     tuner = ktt.Tuner(spec.device.platform, spec.device.device, api)
-    tuner.SetGlobalSizeType(ktt.GlobalSizeType.CUDA)
+    # GlobalSizeType is meaningful for GPU APIs (CUDA grid-of-blocks vs OpenCL
+    # NDRange of work-items). For the C++ backend "global size" is just outer
+    # loop bounds; setting it would either error or be ignored, so skip.
+    if spec.compute_api in ("cuda", "opencl", "vulkan"):
+        tuner.SetGlobalSizeType(ktt.GlobalSizeType.CUDA)
     tuner.SetTimeUnit(ktt.TimeUnit.Microseconds)
 
     scalar_values_int = {s.name: int(s.value) for s in spec.scalars}

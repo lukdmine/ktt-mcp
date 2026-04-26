@@ -14,6 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # --- atomic enums (string-typed for human readability in JSON) ---
 
 ComputeApi = Literal["cuda", "opencl", "cpp", "vulkan"]
+# `cuda`/`opencl`/`vulkan` → GPU backends, kernel signature is the standard
+# positional `(const T* a, T* c, ...)` model.
+# `cpp` → host CPU autotuning with g++ JIT; kernel signature is FIXED as
+# `extern "C" void k(void** buffers, size_t* sizes)`. See KttSpec docstring.
 Dtype = Literal[
     "int8", "int16", "int32", "int64",
     "uint8", "uint16", "uint32", "uint64",
@@ -208,17 +212,31 @@ class KttSpec(_Strict):
     All file paths (kernel.file, reference.file) MUST be absolute — KTT
     resolves them on the server's filesystem, not the client's.
 
-    KERNEL ARGUMENT MODEL — read carefully when authoring a kernel:
-    - `vectors` become POSITIONAL kernel arguments in the order listed. The
-      kernel function signature must contain exactly those pointers, in that
-      order, with matching dtypes (e.g. `const float*` for read, `float*` for write).
-    - `scalars` are injected as `-D<name>=<value>` PREPROCESSOR DEFINES — they
-      are NOT passed as kernel arguments. Inside the kernel use `N` as a literal
-      (`if (i < N)`); do NOT add `int N` to the function signature, that will
-      either fail to compile (`int 1024` after preprocessing) or silently shadow
-      the constant.
-    - Tuning `parameters` are also injected as `-D<name>=<value>` defines, so
-      they're available inside the kernel (e.g. `#if BLOCK_X >= 64`).
+    KERNEL ARGUMENT MODEL — depends on `compute_api`:
+
+    For `cuda` / `opencl` / `vulkan` (GPU backends):
+      - `vectors` become POSITIONAL kernel arguments in the order listed. The
+        kernel function signature must contain exactly those pointers, in that
+        order, with matching dtypes (e.g. `const float*` for read, `float*` for write).
+      - `scalars` are injected as `-D<name>=<value>` PREPROCESSOR DEFINES — they
+        are NOT passed as kernel arguments. Inside the kernel use `N` as a literal
+        (`if (i < N)`); do NOT add `int N` to the function signature, that will
+        either fail to compile (`int 1024` after preprocessing) or silently shadow
+        the constant.
+      - Tuning `parameters` are also `-D<name>=<value>` defines (`#if BLOCK_X >= 64`).
+
+    For `cpp` (host C/C++ CPU backend, JIT-compiled with g++):
+      - The kernel signature is FIXED by KTT:
+            `extern "C" void kernelName(void** buffers, size_t* sizes)`
+        Vectors arrive through `buffers[i]` (cast to your dtype) in the order
+        you declared them. `sizes[]` carries the byte length of each buffer.
+      - `scalars` are still `-D` defines (so `N` is a preprocessor constant
+        in the kernel body); KTT also makes them available via `sizes[N+i]`
+        but using the define is simpler.
+      - Tuning `parameters` are `-D` defines just like the GPU backends.
+      - Use `compiler_options` to pass `-fopenmp` etc. for parallelism.
+      - This path is supported by KTT but not yet exercised in our test suite —
+        treat it as preview.
     """
 
     kernel: KernelRef

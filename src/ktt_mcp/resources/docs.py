@@ -93,6 +93,27 @@ extern "C" __global__ void vectorAdd(const float* a, const float* b, float* c) {
 
 (`N` and `BLOCK_X` are visible as preprocessor constants — no kernel parameters for them.)
 
+## CPU autotuning (compute_api: cpp)
+
+KTT can also tune host C/C++ kernels (JIT-compiled with g++). The kernel signature is FIXED by KTT — different from the CUDA case:
+
+```cpp
+extern "C" void mykernel(void** buffers, size_t* sizes) {
+    const float* a = (const float*)buffers[0];
+    const float* b = (const float*)buffers[1];
+    float* c       = (float*)buffers[2];
+    // N is still available as a preprocessor define
+    for (size_t i = 0; i < N; ++i) c[i] = a[i] + b[i];
+}
+```
+
+- Vectors arrive through `buffers[i]` cast to your dtype, in the order declared.
+- `sizes[i]` is the byte length of vector `i`.
+- Scalars and tuning parameters are still `-D` defines (use as bare identifiers).
+- Pass `-O3 -fopenmp -march=native` etc. via `spec.compiler_options`.
+- Set `searcher`, `stop`, `parameters`, and `constraints` exactly like the GPU path.
+- This path is supported by KTT and the spec validates it, but the MCP test suite has not yet exercised it end-to-end. Use with the understanding it's preview-quality.
+
 ## Other tips
 
 - Always set a `validate=true` vector and a reference. Without it the tuner can pick a fast-but-wrong config.
