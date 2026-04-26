@@ -27,16 +27,52 @@ log = logging.getLogger(__name__)
 
 
 def _coerce_spec(spec: dict[str, Any] | str) -> KttSpec:
-    """Accept either an inline dict or a path to a JSON spec file."""
-    if isinstance(spec, str):
-        data = Path(spec).read_text()
-        import json as _json
-        return KttSpec.model_validate(_json.loads(data))
-    return KttSpec.model_validate(spec)
+    """Resolve `spec` to a KttSpec, accepting any of:
+
+    - inline dict already shaped like a KttSpec
+    - path to a `.json` file containing a canonical KttSpec
+    - path to a `.yaml`/`.yml` file containing a canonical KttSpec
+    - path to a directory containing `problem.yaml` (+ optional `params.json`)
+      → translated via `ktt_import_problem_yaml`
+    """
+    if isinstance(spec, dict):
+        return KttSpec.model_validate(spec)
+
+    path = Path(spec)
+    if path.is_dir():
+        if not (path / "problem.yaml").exists():
+            raise ValueError(
+                f"Directory {path} has no problem.yaml; expected a legacy problem dir."
+            )
+        result = _import_yaml(str(path))
+        if not result.get("success"):
+            raise ValueError(result.get("message", "problem.yaml import failed"))
+        return KttSpec.model_validate(result["spec"])
+
+    text = path.read_text()
+    if path.suffix.lower() in (".yaml", ".yml"):
+        import yaml as _yaml
+        data = _yaml.safe_load(text)
+    else:
+        data = json.loads(text)
+    return KttSpec.model_validate(data)
 
 
 def _err(stage: str, message: str, **details: Any) -> dict[str, Any]:
     return {"success": False, "stage": stage, "message": message, "details": details}
+
+
+def _try_coerce_spec(spec: dict[str, Any] | str) -> tuple[KttSpec | None, dict[str, Any] | None]:
+    """Run `_coerce_spec` and translate failures into the standard error envelope.
+
+    Returns `(spec, None)` on success, `(None, error_dict)` on failure.
+    """
+    try:
+        return _coerce_spec(spec), None
+    except ValidationError as e:
+        return None, _err("spec", "Invalid KttSpec.", errors=e.errors())
+    except (ValueError, FileNotFoundError, OSError) as e:
+        return None, _err("spec", f"Could not load spec: {e}")
 
 
 def build_server(*, workdir: str | None = None) -> FastMCP:
@@ -48,12 +84,17 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
     async def ktt_search_space_size(spec: dict[str, Any] | str) -> dict[str, Any]:
         """Count valid configurations in a KTT spec without running anything.
 
+        `spec` accepts:
+          - an inline KttSpec dict
+          - a path to a `.json` or `.yaml` canonical KttSpec file
+          - a path to a directory containing `problem.yaml` (+ optional
+            `params.json`) — the legacy format is converted on the fly
+
         Returns total, after-constraints count, and per-parameter cardinality.
         """
-        try:
-            parsed = _coerce_spec(spec)
-        except ValidationError as e:
-            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        parsed, err = _try_coerce_spec(spec)
+        if err:
+            return err
         return {"success": True, **compute_search_space_size(parsed)}
 
     @mcp.tool()
@@ -101,12 +142,13 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
     ) -> dict[str, Any]:
         """Compile, launch, and validate a kernel + config without timing.
 
-        config is a flat name -> int/float map. Returns valid pass/fail and the run_id.
+        `spec` accepts: inline dict | `.json`/`.yaml` file | directory with
+        `problem.yaml`. `config` is a flat name -> int/float map. Returns
+        valid pass/fail and the run_id.
         """
-        try:
-            parsed = _coerce_spec(spec)
-        except ValidationError as e:
-            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        parsed, err = _try_coerce_spec(spec)
+        if err:
+            return err
         async with gpu_lock:
             return _validate(spec=parsed, config=config, workdir_mgr=workdir_mgr)
 
@@ -116,11 +158,14 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
         config: dict[str, int | float],
         iterations: int = 1,
     ) -> dict[str, Any]:
-        """Run a single configuration N times and return timing stats."""
-        try:
-            parsed = _coerce_spec(spec)
-        except ValidationError as e:
-            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        """Run a single configuration N times and return timing stats.
+
+        `spec` accepts: inline dict | `.json`/`.yaml` file | directory with
+        `problem.yaml`.
+        """
+        parsed, err = _try_coerce_spec(spec)
+        if err:
+            return err
         async with gpu_lock:
             return _run_config(spec=parsed, config=config, workdir_mgr=workdir_mgr, iterations=iterations)
 
@@ -131,13 +176,13 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
     ) -> dict[str, Any]:
         """Run full autotuning. Returns best config, top-N, and a summary string.
 
-        The full results JSON is at the returned `results_file` path; pass it
-        back to ktt_explain_results for deeper analysis.
+        `spec` accepts: inline dict | `.json`/`.yaml` file | directory with
+        `problem.yaml`. The full results JSON is at the returned `results_file`
+        path; pass it back to ktt_explain_results for deeper analysis.
         """
-        try:
-            parsed = _coerce_spec(spec)
-        except ValidationError as e:
-            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        parsed, err = _try_coerce_spec(spec)
+        if err:
+            return err
         async with gpu_lock:
             return _tune(spec=parsed, workdir_mgr=workdir_mgr, top_n=top_n)
 
@@ -147,11 +192,15 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
         config: dict[str, int | float],
         counters: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Run a config with profiling counters enabled. counters=None uses the default set."""
-        try:
-            parsed = _coerce_spec(spec)
-        except ValidationError as e:
-            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        """Run a config with profiling counters enabled.
+
+        `spec` accepts: inline dict | `.json`/`.yaml` file | directory with
+        `problem.yaml`. `counters=None` uses the default set; see
+        ktt://docs/profiling-counters.
+        """
+        parsed, err = _try_coerce_spec(spec)
+        if err:
+            return err
         async with gpu_lock:
             return _profile(spec=parsed, config=config, counters=counters, workdir_mgr=workdir_mgr)
 
