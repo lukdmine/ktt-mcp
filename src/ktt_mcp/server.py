@@ -15,6 +15,7 @@ from ktt_mcp.tools.devices import describe_device as _describe_device, list_devi
 from ktt_mcp.tools.explain_results import explain_results as _explain
 from ktt_mcp.tools.import_loader import import_loader_json as _import_loader
 from ktt_mcp.tools.import_yaml import import_problem_yaml as _import_yaml
+from ktt_mcp.tools.profile import profile as _profile
 from ktt_mcp.tools.run import run_config as _run_config
 from ktt_mcp.tools.search_space import compute_search_space_size
 from ktt_mcp.tools.tune import tune as _tune
@@ -141,6 +142,20 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
             return _err("spec", "Invalid KttSpec.", errors=e.errors())
         async with gpu_lock:
             return _tune(spec=parsed, workdir_mgr=workdir_mgr, top_n=top_n)
+
+    @mcp.tool()
+    async def ktt_profile(
+        spec: dict[str, Any] | str,
+        config: dict[str, int | float],
+        counters: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Run a config with profiling counters enabled. counters=None uses the default set."""
+        try:
+            parsed = _coerce_spec(spec)
+        except ValidationError as e:
+            return _err("spec", "Invalid KttSpec.", errors=e.errors())
+        async with gpu_lock:
+            return _profile(spec=parsed, config=config, counters=counters, workdir_mgr=workdir_mgr)
 
     log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
     return mcp

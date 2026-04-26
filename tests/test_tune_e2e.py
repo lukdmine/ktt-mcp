@@ -84,3 +84,17 @@ async def test_tune_finds_best_config(fixtures_dir: Path, tmp_workdir: Path):
     assert structured["best"]["time_us"] > 0
     assert len(structured["top"]) >= 1
     assert Path(structured["results_file"]).exists()
+
+
+@pytest.mark.gpu
+@pytest.mark.asyncio
+async def test_profile_returns_duration(fixtures_dir: Path, tmp_workdir: Path):
+    from ktt_mcp.server import build_server
+    server = build_server(workdir=str(tmp_workdir))
+    spec = _vector_add_spec(fixtures_dir)
+    _content, structured = await server.call_tool(
+        "ktt_profile", {"spec": spec, "config": {"BLOCK_X": 64}}
+    )
+    assert structured["success"] is True
+    assert structured["duration_us"] is None or structured["duration_us"] > 0
+    assert isinstance(structured["counters"], dict)
