@@ -1,0 +1,45 @@
+name: VectorAdd
+description: 'a + b -> c'
+gpu:
+  index: 0
+kernel:
+  file: kernel.cu
+  function: vectorAdd
+reference:
+  type: cuda
+  function: vectorAdd_ref
+  file: ref_kernel.cu
+  block_x: 8
+  block_y: 1
+scalars:
+- name: N
+  dtype: int
+  value: 1024
+grid:
+  x: N
+  y: 1
+vectors:
+- name: a
+  dtype: float
+  size: N
+  access: read
+  init: random
+  init_min: -1.0
+  init_max: 1.0
+  validate: false
+- name: b
+  dtype: float
+  size: N
+  access: read
+  init: random
+  validate: false
+- name: c
+  dtype: float
+  size: N
+  access: write
+  init: zeros
+  validate: true
+validation:
+  tolerance: 0.001
+tuning:
+  duration_s: 30

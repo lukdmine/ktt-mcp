@@ -1,0 +1,16 @@
+{
+  "parameters": [
+    { "name": "BLOCK_X", "values": [32, 64, 128, 256] }
+  ],
+  "launch_config": {
+    "grid_x": "(N + BLOCK_X - 1) // BLOCK_X",
+    "grid_y": "1",
+    "grid_z": "1",
+    "block_x": "BLOCK_X",
+    "block_y": "1",
+    "block_z": "1"
+  },
+  "constraints": [
+    { "params": ["BLOCK_X"], "expr": "N % BLOCK_X == 0" }
+  ]
+}
