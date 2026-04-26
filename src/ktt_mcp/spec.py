@@ -51,8 +51,21 @@ class DeviceRef(_Strict):
 
 
 class Scalar(_Strict):
-    name: str = Field(description="Identifier injected as `-D<name>=<value>` and usable inside size/grid expressions.")
-    dtype: Dtype = "int32"
+    """A problem scalar — injected as a COMPILE-TIME PREPROCESSOR DEFINE, not a runtime kernel argument.
+
+    The scalar is added to the kernel compile flags as `-D<name>=<value>` (with the
+    appropriate `f`/`.0` suffix for floats/doubles). Inside the kernel source, write
+    `c[i] = a[i] + b[i]` and use `N` as a literal — DO NOT add an `int N` parameter
+    to the function signature. Adding a kernel-arg parameter for a scalar will
+    produce a CUDA compile error (`int 1024` after preprocessing).
+
+    Use scalars for problem dimensions (M, N, K, batch size, tile size of the
+    workload, etc.) and any constant the kernel and reference both want to see.
+    They're also evaluated inside vector `size`, grid, block, and constraint expressions.
+    """
+
+    name: str = Field(description="Identifier injected as `-D<name>=<value>`. Used in expressions and inside the kernel as a preprocessor constant.")
+    dtype: Dtype = Field(default="int32", description="Determines the `-D` formatting (e.g. `1.0f` vs `1` vs `1.0`).")
     value: float | int
 
 
@@ -194,6 +207,18 @@ class KttSpec(_Strict):
 
     All file paths (kernel.file, reference.file) MUST be absolute — KTT
     resolves them on the server's filesystem, not the client's.
+
+    KERNEL ARGUMENT MODEL — read carefully when authoring a kernel:
+    - `vectors` become POSITIONAL kernel arguments in the order listed. The
+      kernel function signature must contain exactly those pointers, in that
+      order, with matching dtypes (e.g. `const float*` for read, `float*` for write).
+    - `scalars` are injected as `-D<name>=<value>` PREPROCESSOR DEFINES — they
+      are NOT passed as kernel arguments. Inside the kernel use `N` as a literal
+      (`if (i < N)`); do NOT add `int N` to the function signature, that will
+      either fail to compile (`int 1024` after preprocessing) or silently shadow
+      the constant.
+    - Tuning `parameters` are also injected as `-D<name>=<value>` defines, so
+      they're available inside the kernel (e.g. `#if BLOCK_X >= 64`).
     """
 
     kernel: KernelRef

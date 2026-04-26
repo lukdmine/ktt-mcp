@@ -70,10 +70,36 @@ KTT typically needs MULTIPLE Run() invocations of the same config to gather ever
 BEST_PRACTICES_DOC = """\
 # KTT MCP — best practices
 
+## Kernel signature
+
+- `vectors` are passed as positional kernel arguments in spec order. The kernel
+  function signature must contain exactly those pointers (typed `const T*` for
+  read, `T*` for write/readwrite).
+- `scalars` and tuning `parameters` are NOT kernel arguments — they're
+  `-D<name>=<value>` preprocessor defines. Use them as bare identifiers inside
+  the kernel (`if (i < N)`, `#if BLOCK_X >= 64`). Do not add them to the
+  function parameter list.
+- The reference kernel (`reference.kind=kernel`) is invoked with the SAME
+  argument list as the tuned kernel — its signature must match.
+
+Example for a vector-add spec with scalars=[N], vectors=[a, b, c]:
+
+```cuda
+extern "C" __global__ void vectorAdd(const float* a, const float* b, float* c) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N) c[i] = a[i] + b[i];
+}
+```
+
+(`N` and `BLOCK_X` are visible as preprocessor constants — no kernel parameters for them.)
+
+## Other tips
+
 - Always set a `validate=true` vector and a reference. Without it the tuner can pick a fast-but-wrong config.
-- Make `stop.value` match the search space size. ktt_search_space_size first.
+- Make `stop.value` match the search space size. Run ktt_search_space_size first.
 - Use `launch_config` (a custom launcher) when grid/block depend on multiple parameters.
 - Constraints prune the space cheaply. Use them to cut block/warp/vector incompatibilities before runtime.
 - For MCMC, set `searcher.options.seed` when you want reproducibility.
 - For tensor-core kernels, mark vectors with the right alignment dtype (`half`, `float`).
+- Wrap `__global__` definitions in `extern "C"` to avoid C++ name mangling — KTT looks up the function by exact name.
 """

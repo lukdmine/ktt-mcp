@@ -102,6 +102,14 @@ PATH RULES (IMPORTANT)
   on the server, not on the client. Always use ABSOLUTE paths to avoid surprises.
 - The same applies when you pass a path string as the `spec` itself.
 
+KERNEL ARGUMENT MODEL (IMPORTANT)
+- `vectors` become positional kernel arguments in declaration order. The kernel
+  function signature must list those pointers and only those.
+- `scalars` and tuning `parameters` are injected as `-D<name>=<value>` PREPROCESSOR
+  DEFINES, not runtime arguments. In the kernel, refer to them as bare identifiers
+  (e.g. `if (i < N)`, `#if BLOCK_X >= 64`). Adding an `int N` parameter to the
+  function signature will produce a compile error after preprocessing.
+
 GOTCHAS
 - At least one vector must have `validate: true` AND a `reference` must be set
   (kind=kernel or kind=cpu_c) for KTT to validate output. Otherwise the tuner
