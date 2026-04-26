@@ -1,0 +1,47 @@
+{
+  "Results": [
+    {
+      "KernelName": "AgentKernel",
+      "Configuration": [
+        {"Name": "BLOCK_X", "Value": "32"},
+        {"Name": "VEC", "Value": "1"}
+      ],
+      "TotalDuration": 240.5,
+      "Status": "Ok"
+    },
+    {
+      "KernelName": "AgentKernel",
+      "Configuration": [
+        {"Name": "BLOCK_X", "Value": "64"},
+        {"Name": "VEC", "Value": "1"}
+      ],
+      "TotalDuration": 180.2,
+      "Status": "Ok"
+    },
+    {
+      "KernelName": "AgentKernel",
+      "Configuration": [
+        {"Name": "BLOCK_X", "Value": "128"},
+        {"Name": "VEC", "Value": "2"}
+      ],
+      "TotalDuration": 145.7,
+      "Status": "Ok"
+    },
+    {
+      "KernelName": "AgentKernel",
+      "Configuration": [
+        {"Name": "BLOCK_X", "Value": "256"},
+        {"Name": "VEC", "Value": "4"}
+      ],
+      "Status": "ValidationFailed"
+    },
+    {
+      "KernelName": "AgentKernel",
+      "Configuration": [
+        {"Name": "BLOCK_X", "Value": "512"},
+        {"Name": "VEC", "Value": "1"}
+      ],
+      "Status": "CompileFailed"
+    }
+  ]
+}
