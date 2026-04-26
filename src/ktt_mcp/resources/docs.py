@@ -93,6 +93,32 @@ extern "C" __global__ void vectorAdd(const float* a, const float* b, float* c) {
 
 (`N` and `BLOCK_X` are visible as preprocessor constants — no kernel parameters for them.)
 
+## Backend support matrix
+
+KTT itself supports four kernel formats. Our spec validates all four; maturity through this MCP differs.
+
+| `compute_api` | What KTT compiles | Kernel signature | Status in MCP |
+| ------------- | ----------------- | ---------------- | ------------- |
+| `cuda`        | `.cu` via NVRTC   | `__global__ void k(const T* a, …)` (positional vector args) | Fully tested. Profiling supported when KTT built with `--profiling=cupti`. |
+| `opencl`      | `.cl` via OpenCL runtime | `__kernel void k(__global const T* a, …)` (positional). Vendor-portable (NVIDIA, AMD, Intel). | Spec validates, runtime calls the same KTT API; not yet in our test suite. Treat as preview. |
+| `cpp`         | `.cpp`/`.cc` JIT-compiled with g++ | `extern "C" void k(void** buffers, size_t* sizes)` — DIFFERENT from GPU backends. Vectors arrive in `buffers[]`. | Preview; supported by KTT; not in our test suite. |
+| `vulkan`      | GLSL compute shaders compiled to SPIR-V | `void main()` with explicit descriptor-set bindings | Preview AND experimental in KTT itself (no profiling, no unified memory, subset of buffer ops). |
+
+Recommended default: stick to `cuda` until you have a specific reason for another backend. Use `cpp` when the kernel is naturally CPU-shaped (loops over big arrays, OpenMP-friendly). Use `opencl` for cross-vendor portability. Avoid `vulkan` unless you specifically need GLSL.
+
+## What this MCP intentionally does NOT support (yet)
+
+KTT has features beyond what our spec exposes. If you need any of these, the importer tools (`ktt_import_loader_json`) won't help — you'd have to extend the MCP:
+
+- **Composite kernels** — multi-`KernelDefinition` kernels with custom launchers (radix sort, BiCG-style). Spec uses one definition per kernel.
+- **Templated CUDA kernels** — KTT lets you specify template type arguments at definition time; our `KernelRef` accepts only a function name.
+- **Local memory arguments** — KTT's `AddArgumentLocal<T>(size)` for OpenCL `__local` / CUDA `__shared__`. Use `__shared__` declared inside the kernel body instead.
+- **Symbol arguments** — CUDA `__constant__` / `__device__` variables exposed via `AddArgumentSymbol`.
+- **Custom Python searchers / stop conditions** — KTT supports them; we deliberately don't allow code injection through the MCP boundary.
+- **Online (dynamic) tuning** — `tuner.TuneIteration(...)`. The MCP is offline-tuning only.
+- **Energy / power-usage measurement** — requires a separate KTT build flag and is NVIDIA-only.
+- **Custom value comparators / argument types** — only built-in dtypes (int*, uint*, float, double) are exposed.
+
 ## CPU autotuning (compute_api: cpp)
 
 KTT can also tune host C/C++ kernels (JIT-compiled with g++). The kernel signature is FIXED by KTT — different from the CUDA case:

@@ -14,10 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # --- atomic enums (string-typed for human readability in JSON) ---
 
 ComputeApi = Literal["cuda", "opencl", "cpp", "vulkan"]
-# `cuda`/`opencl`/`vulkan` → GPU backends, kernel signature is the standard
-# positional `(const T* a, T* c, ...)` model.
-# `cpp` → host CPU autotuning with g++ JIT; kernel signature is FIXED as
-# `extern "C" void k(void** buffers, size_t* sizes)`. See KttSpec docstring.
+# Backend support (see ktt://docs/best-practices for full matrix):
+#   cuda    GPU, NVIDIA. NVRTC-compiled `.cu`. FULLY TESTED in this MCP.
+#   opencl  GPU/CPU, vendor-portable. OpenCL C `.cl`. Spec validates but the
+#           MCP test suite does not yet exercise this path; treat as preview.
+#   cpp     Host CPU. JIT-compiled `.cpp` with g++. Different kernel ABI —
+#           see KttSpec docstring. Preview.
+#   vulkan  GLSL compute shaders, EXPERIMENTAL in KTT itself (no profiling,
+#           no unified-memory, subset of advanced buffer ops). Preview.
 Dtype = Literal[
     "int8", "int16", "int32", "int64",
     "uint8", "uint16", "uint32", "uint64",

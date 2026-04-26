@@ -120,6 +120,17 @@ CPU backend (`compute_api: cpp`):
   identifiers in the body. This path is functional but not yet exercised by
   our test suite — treat as preview.
 
+BACKEND MATURITY (cuda/opencl/cpp/vulkan)
+- `cuda`   tested end-to-end in this MCP.
+- `opencl` validated by the spec, runtime path unchanged from CUDA except for
+           the kernel language; not yet in the test suite. Preview.
+- `cpp`    see CPU backend section above. Preview.
+- `vulkan` GLSL compute shaders. EXPERIMENTAL in KTT itself (no profiling, no
+           unified memory, subset of buffer ops). Preview.
+See ktt://docs/best-practices for the full backend matrix and what's not yet
+exposed (composite kernels, templated CUDA, local-memory args, symbol args,
+online tuning, custom searchers).
+
 GOTCHAS
 - At least one vector must have `validate: true` AND a `reference` must be set
   (kind=kernel or kind=cpu_c) for KTT to validate output. Otherwise the tuner
