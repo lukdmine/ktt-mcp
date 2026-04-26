@@ -11,6 +11,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
 
 from ktt_mcp.spec import KttSpec
+from ktt_mcp.tools.devices import describe_device as _describe_device, list_devices as _list_devices
 from ktt_mcp.tools.explain_results import explain_results as _explain
 from ktt_mcp.tools.import_loader import import_loader_json as _import_loader
 from ktt_mcp.tools.import_yaml import import_problem_yaml as _import_yaml
@@ -76,6 +77,20 @@ def build_server(*, workdir: str | None = None) -> FastMCP:
         Returns the spec plus a list of warnings about features that didn't translate.
         """
         return _import_loader(loader_path)
+
+    @mcp.tool()
+    async def ktt_list_devices(compute_api: str = "cuda") -> dict[str, Any]:
+        """List available platforms and devices for the given compute API."""
+        async with gpu_lock:
+            return _list_devices(compute_api=compute_api)
+
+    @mcp.tool()
+    async def ktt_describe_device(
+        compute_api: str = "cuda", platform: int = 0, device: int = 0
+    ) -> dict[str, Any]:
+        """Get detailed capabilities for a specific device."""
+        async with gpu_lock:
+            return _describe_device(compute_api=compute_api, platform=platform, device=device)
 
     log.info("ktt-mcp server initialised. workdir=%s", workdir_mgr.root)
     return mcp

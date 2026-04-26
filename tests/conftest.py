@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,13 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _pyktt_available() -> bool:
+    env = os.environ.get("KTT_PYKTT_PATH")
+    if env:
+        so = Path(env)
+        if so.is_file():
+            parent = str(so.parent.resolve())
+            if parent not in sys.path:
+                sys.path.insert(0, parent)
     try:
         importlib.import_module("pyktt")
         return True
