@@ -10,6 +10,20 @@ from ktt_mcp.runtime.pyktt_loader import load_pyktt
 _API_NAME = {"cuda": "CUDA", "opencl": "OpenCL", "cpp": "Cpp", "vulkan": "Vulkan"}
 
 
+def _to_jsonable(value: Any) -> Any:
+    """Coerce KTT enums (and any other non-primitive) to a JSON-friendly form.
+
+    pyktt exposes types like pyktt.DeviceType which the MCP serializer can't
+    encode directly. We prefer the enum's `.name` (e.g. "GPU"), fall back to str().
+    """
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    name = getattr(value, "name", None)
+    if isinstance(name, str):
+        return name
+    return str(value)
+
+
 def _api_enum(ktt, api: str):
     return getattr(ktt.ComputeApi, _API_NAME[api])
 
@@ -70,9 +84,10 @@ def describe_device(compute_api: str = "cuda", platform: int = 0, device: int = 
             getter = getattr(d, attr, None)
             if getter is not None:
                 try:
-                    info[label] = getter()
+                    raw = getter()
                 except Exception:
-                    pass
+                    continue
+                info[label] = _to_jsonable(raw)
         return {"success": True, "device": info}
     except Exception as e:
         return {"success": False, "stage": "io", "message": f"pyktt error: {e}"}
