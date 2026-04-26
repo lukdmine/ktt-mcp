@@ -55,3 +55,17 @@ async def test_validate_passes_for_correct_kernel(fixtures_dir: Path, tmp_workdi
     )
     assert structured["success"] is True
     assert structured["valid"] is True
+
+
+@pytest.mark.gpu
+@pytest.mark.asyncio
+async def test_run_returns_timing(fixtures_dir: Path, tmp_workdir: Path):
+    from ktt_mcp.server import build_server
+    server = build_server(workdir=str(tmp_workdir))
+    spec = _vector_add_spec(fixtures_dir)
+    _content, structured = await server.call_tool(
+        "ktt_run", {"spec": spec, "config": {"BLOCK_X": 128}, "iterations": 3}
+    )
+    assert structured["success"] is True
+    assert structured["timing"]["mean_us"] > 0
+    assert structured["timing"]["iterations"] == 3
