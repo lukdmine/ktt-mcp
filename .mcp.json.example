@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ktt": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "ktt_mcp", "--workdir", "./.ktt-mcp"],
+      "env": {
+        "KTT_PYKTT_PATH": "${KTT_PYKTT_PATH}"
+      }
+    }
+  }
+}
